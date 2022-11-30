@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 
 from aiogram import Dispatcher, types
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -6,10 +6,14 @@ from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 
 from app.base import dbwork
-from app.base import bot_user_data
+# from app.base import bot_user_data
 
 cb = CallbackData("id", "action", "some_data")
-now = datetime.now()
+
+now = datetime.datetime.now()
+from_date = now.strftime("%Y.%m.%d")
+before_date = now + datetime.timedelta(days=7)
+before_date = before_date.strftime("%Y.%m.%d")
 
 
 class MenuStates(StatesGroup):
@@ -18,37 +22,37 @@ class MenuStates(StatesGroup):
 
 async def menu_start(message: types.Message, state: FSMContext, edite: bool = False):
     await MenuStates.clean.set()
+    await state.update_data(from_date=from_date, before_date=before_date)
 
-    if message.from_user.is_bot:
-        user_id = message.chat.id
+    user = dbwork.get_user(message.chat.id)
+    if user['permissions'] in ['Сотрудник', 'Админ']:
+        keyboard = types.InlineKeyboardMarkup(row_width=1)
+
+        buttons = [
+            types.InlineKeyboardButton(text="Создать бронь",
+                                       callback_data=cb.new(action="show_free_dates",
+                                                            some_data=0)),
+            types.InlineKeyboardButton(text="Просмотреть брони",
+                                       callback_data=cb.new(action="show_reservations",
+                                                            some_data=0))
+        ]
+
+        text = "*Бот\-Регистратор или типа того\.*\n" \
+               "`                       Версия 1\.1`\n\n" \
+               "                        Главное меню"
+
+        keyboard.add(*buttons)
+
+        if edite:
+            await message.edit_text(text, reply_markup=keyboard, parse_mode='MarkdownV2')
+        else:
+            await message.answer(text, reply_markup=keyboard, parse_mode='MarkdownV2')
     else:
-        user_id = message.from_user.id
-
-    keyboard = types.InlineKeyboardMarkup(row_width=1)
-
-    buttons = [
-        types.InlineKeyboardButton(text="Создать бронь",
-                                   callback_data=cb.new(action="show_free_dates",
-                                                        some_data=0)),
-        types.InlineKeyboardButton(text="Просмотреть брони",
-                                   callback_data=cb.new(action="staff_menu",
-                                                        some_data=0)),
-        types.InlineKeyboardButton(text="Ping",
-                                   callback_data=cb.new(action="test",
-                                                        some_data=0))
-    ]
-
-    text = "*Бот\-Регистратор или типа того\.*\n" \
-           "`                       Версия 1\.0`\n\n" \
-           "                        Главное меню"
-
-    keyboard.add(*buttons)
-    if not edite:
-        await message.answer(text, reply_markup=keyboard, parse_mode='MarkdownV2')
-        dbwork.add_user(user_id, message.from_user.first_name,
-                        message.from_user.last_name)
-    else:
-        await message.edit_text(text, reply_markup=keyboard, parse_mode='MarkdownV2')
+        text = "В доступе отказано. Обратитесь к администратору"
+        if edite:
+            await message.edit_text(text)
+        else:
+            await message.answer(text)
 
 
 async def call_menu_start(call: types.CallbackQuery, state: FSMContext):
